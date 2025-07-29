@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Dashboard with City Weather Input</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            background: #d4a0a0;
+        }
+        canvas {
+            background: #e6e4e4;
+            padding: 10px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">📊 Real-Time Dashboard</h1>
+
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <h3>Crypto Price</h3>
+                <canvas id="cryptoChart"></canvas>
+            </div>
+
+            <div class="col-md-6">
+                <h3>Weather</h3>
+
+                <!-- City input -->
+                <div class="mb-3">
+                    <input id="cityInput" type="text" class="form-control" placeholder="Enter city name" />
+                    <button id="fetchWeatherBtn" class="btn btn-primary mt-2">Get Weather</button>
+                </div>
+
+                <div id="weatherInfo"></div>
+
+                <canvas id="weatherChart" style="margin-top: 20px;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Crypto Chart setup (same as before)
+        const ctxCrypto = document.getElementById('cryptoChart').getContext('2d');
+        let cryptoChartData = {
+            labels: [],
+            datasets: [{
+                label: 'Bitcoin (USD)',
+                data: [],
+                backgroundColor: 'rgba(255, 206, 86, 0.2)',
+                borderColor: 'rgba(255, 206, 86, 1)',
+                borderWidth: 2
+            }]
+        };
+        const cryptoChart = new Chart(ctxCrypto, {
+            type: 'line',
+            data: cryptoChartData,
+            options: {
+                responsive: true,
+                scales: { y: { beginAtZero: false } }
+            }
+        });
+
+        async function fetchCryptoData() {
+            try {
+                const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+                const data = await res.json();
+                return data.bitcoin.usd;
+            } catch (e) {
+                console.error('Error fetching crypto data:', e);
+                return null;
+            }
+        }
+ 
+        async function updateCryptoChart() {
+            const price = await fetchCryptoData();
+            if (price === null) return;
+
+            const now = new Date().toLocaleTimeString();
+            cryptoChartData.labels.push(now);
+            cryptoChartData.datasets[0].data.push(price);
+
+            if (cryptoChartData.labels.length > 10) {
+                cryptoChartData.labels.shift();
+                cryptoChartData.datasets[0].data.shift();
+            }
+
+            cryptoChart.update();
+        }
+
+        // Weather Chart setup
+        const ctxWeather = document.getElementById('weatherChart').getContext('2d');
+        let weatherChartData = {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Temperature (°C)',
+                    data: [],
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    yAxisID: 'y',
+                },
+                {
+                    label: 'Humidity (%)',
+                    data: [],
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    yAxisID: 'y1',
+                }
+            ]
+        };
+        const weatherChart = new Chart(ctxWeather, {
+            type: 'line',
+            data: weatherChartData,
+            options: {
+                responsive: true,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                stacked: false,
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: { display: true, text: 'Temperature (°C)' },
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Humidity (%)' },
+                    }
+                }
+            }
+        });
+
+        // Fetch weather data for a city
+        async function fetchWeather(city) {
+            const apiKey = 'f593a0c683939642bb99650568cbd2e1'; // Your API key
+            try {
+                const response = await fetch(
+                    `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`
+                );
+                const data = await response.json();
+                if (data.cod !== 200) {
+                    throw new Error(data.message);
+                }
+                return {
+                    temp: data.main.temp,
+                    humidity: data.main.humidity,
+                    description: data.weather[0].description,
+                    cityName: data.name
+                };
+            } catch (error) {
+                console.error('Error fetching weather:', error);
+                return null;
+            }
+        }
+
+        // Update weather display and chart
+        async function updateWeather(city) {
+            const weather = await fetchWeather(city);
+            const weatherInfoDiv = document.getElementById('weatherInfo');
+
+            if (!weather) {
+                weatherInfoDiv.innerText = 'Failed to load weather data for "' + city + '". Please try another city.';
+                return;
+            }
+
+            weatherInfoDiv.innerHTML = `
+                <p><strong>City:</strong> ${weather.cityName}</p>
+                <p>🌡️ Temperature: ${weather.temp}°C</p>
+                <p>💧 Humidity: ${weather.humidity}%</p>
+                <p>☁️ Condition: ${weather.description}</p>
+            `;
+
+            // Add data to weather chart
+            const now = new Date().toLocaleTimeString();
+            weatherChartData.labels.push(now);
+            weatherChartData.datasets[0].data.push(weather.temp);
+            weatherChartData.datasets[1].data.push(weather.humidity);
+
+            // Keep last 10 entries max
+            if (weatherChartData.labels.length > 10) {
+                weatherChartData.labels.shift();
+                weatherChartData.datasets[0].data.shift();
+                weatherChartData.datasets[1].data.shift();
+            }
+
+            weatherChart.update();
+        }
+
+        // Initial calls
+        updateCryptoChart();
+        updateWeather('Bangalore'); // default city
+
+        // Set intervals for crypto and weather updates
+        setInterval(updateCryptoChart, 5000);
+
+        // Weather update will be triggered manually or every 60s for current city
+        let weatherUpdateInterval = null;
+
+        // Handle city input button click
+        document.getElementById('fetchWeatherBtn').addEventListener('click', () => {
+            const city = document.getElementById('cityInput').value.trim();
+            if (!city) {
+                alert('Please enter a city name.');
+                return;
+            }
+            // Clear previous data from chart
+            weatherChartData.labels = [];
+            weatherChartData.datasets[0].data = [];
+            weatherChartData.datasets[1].data = [];
+            weatherChart.update();
+
+            // Update weather for new city immediately
+            updateWeather(city);
+
+            // Clear any existing interval and set new one for this city
+            if (weatherUpdateInterval) clearInterval(weatherUpdateInterval);
+            weatherUpdateInterval = setInterval(() => updateWeather(city), 5000);
+        });
+
+        // Optionally, update weather for default city every 60s if user hasn't entered any city
+        weatherUpdateInterval = setInterval(() => updateWeather(document.getElementById('cityInput').value.trim() || 'Bangalore'), 5000);
+
+    </script>
+</body>
+
+</html>
